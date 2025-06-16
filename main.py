@@ -11,6 +11,23 @@ st.set_page_config(
     layout="wide"
 )
 
+def generate_tv_level_text(df):
+    lines = []
+
+    def format_top(df, col, count=3, reverse=True, label=""):
+        sorted_df = df.sort_values(col, ascending=not reverse).head(count)
+        for i, row in enumerate(sorted_df.itertuples(), 1):
+            lines.append(f"{label}{i}:{int(row.Strike)}")
+
+    format_top(df, 'Absolute_GEX', label="AG")
+    format_top(df[df.Net_GEX > 0], 'Net_GEX', label="P")
+    format_top(df[df.Net_GEX < 0], 'Net_GEX', reverse=False, label="N")
+    format_top(df, 'Cumulative_OI', label="HOI")
+    format_top(df, 'Call_OpenInterest', label="COI")
+    format_top(df, 'Put_OpenInterest', label="POI")
+
+    return ";".join(lines)
+
 def calculate_gex(df, lot_size):
     """Calculate Gamma Exposure (GEX) for options"""
     df = df.copy()
@@ -218,7 +235,7 @@ def main():
                 if flip_point:
                     st.metric("Gamma Flip", flip_point)
                 else:
-                    st.write("-")
+                    st.metric("Gamma Flip", "-")
 
             st.markdown("### 📊 Strikes with Highest Open Interest")
 
@@ -320,9 +337,27 @@ def main():
 
                 # Format columns for display
                 for col in ['Call_OpenInterest', 'Put_OpenInterest', 'Cumulative_OI']:
-                    display_formatted[col] = (display_formatted[col] / lot_size).astype(int).map('{:,}'.format)
-                display_formatted['Net_GEX_Lots'] = display_formatted['Net_GEX_Lots'].astype(int).map('{:,}'.format)
-                display_formatted['Absolute_GEX_Lots'] = display_formatted['Absolute_GEX_Lots'].astype(int).map('{:,}'.format)
+                    display_formatted[col] = (
+                        display_formatted_raw[col]
+                        .fillna(0)                 # Replace NaN with 0
+                        .replace([np.inf, -np.inf], 0)  # Replace inf with 0
+                        .astype(int)
+                        .map('{:,}'.format)
+                    )
+                display_formatted['Net_GEX_Lots'] = (
+                    display_formatted_raw['Net_GEX_Lots']
+                    .fillna(0)
+                    .replace([np.inf, -np.inf], 0)
+                    .astype(int)
+                    .map('{:,}'.format)
+                )
+                display_formatted['Absolute_GEX_Lots'] = (
+                    display_formatted_raw['Absolute_GEX_Lots']
+                    .fillna(0)
+                    .replace([np.inf, -np.inf], 0)
+                    .astype(int)
+                    .map('{:,}'.format)
+                )
 
                 # Rename for display only
                 display_formatted.columns = ['Strike', 'Call OI (Lots)', 'Put OI (Lots)',
@@ -334,7 +369,14 @@ def main():
                 display_formatted = display_formatted_raw.copy()
 
                 for col in ['Call_OpenInterest', 'Put_OpenInterest', 'Cumulative_OI', 'Net_GEX', 'Absolute_GEX']:
-                    display_formatted[col] = display_formatted[col].astype(int).map('{:,}'.format)
+                    display_formatted[col] = (
+                        display_formatted_raw[col]
+                        .fillna(0)                 # Replace NaN with 0
+                        .replace([np.inf, -np.inf], 0)  # Replace inf with 0
+                        .astype(int)
+                        .map('{:,}'.format)
+                    )
+
 
                 display_formatted.columns = ['Strike', 'Call OI (Qty)', 'Put OI (Qty)',
                                              'Total OI (Qty)', 'Net GEX (₹)', 'Abs GEX (₹)']
@@ -400,6 +442,13 @@ def main():
                 hide_index=True,
                 height=600
             )
+
+            # === TradingView Auto-Level Section ===
+            st.markdown("---")
+            st.subheader("📌 TradingView Levels for Auto-Marking")
+            tv_text = generate_tv_level_text(df)
+            st.code(tv_text, language="text")
+
 
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
